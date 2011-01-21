@@ -51,21 +51,22 @@
 - (void)viewDidAppear:(BOOL)animated {
 	
 	/*Facebook Application ID*/
-	NSString *client_id = @"123145257717248";
-
+	NSString *client_id = @"130902823636657";
+	
 	//alloc and initalize our FbGraph instance
 	self.fbGraph = [[FbGraph alloc] initWithFbClientID:client_id];
 	
 	//begin the authentication process.....
-	[fbGraph authenticateUserWithCallbackObject:self andSelector:@selector(fbGraphCallback:) andExtendedPermissions:@"user_photos,user_videos,publish_stream,offline_access"];
-
+	[fbGraph authenticateUserWithCallbackObject:self andSelector:@selector(fbGraphCallback:) 
+						 andExtendedPermissions:@"user_photos,user_videos,publish_stream,offline_access,user_checkins,friends_checkins"];
+	
 	/**
 	 * OR you may wish to 'anchor' the login UIWebView to a window not at the root of your application...
 	 * for example you may wish it to render/display inside a UITabBar view....
 	 *
 	 * Feel free to try both methods here, simply (un)comment out the appropriate one.....
 	 **/
-//	[fbGraph authenticateUserWithCallbackObject:self andSelector:@selector(fbGraphCallback:) andExtendedPermissions:@"user_photos,user_videos,publish_stream,offline_access" andSuperView:self.view];
+	//	[fbGraph authenticateUserWithCallbackObject:self andSelector:@selector(fbGraphCallback:) andExtendedPermissions:@"user_photos,user_videos,publish_stream,offline_access" andSuperView:self.view];
 	
 }
 
@@ -110,7 +111,7 @@
  * DOC:  http://developers.facebook.com/docs/reference/api/user
  **/
 -(IBAction)postMeFeedButtonPressed:(id)sender {
-
+	
 	NSMutableDictionary *variables = [NSMutableDictionary dictionaryWithCapacity:4];
 	
 	[variables setObject:@"this is a test message: postMeFeedButtonPressed" forKey:@"message"];
@@ -138,7 +139,7 @@
  * DOC:  http://developers.facebook.com/docs/reference/api/photo
  **/
 -(IBAction)postPictureButtonPressed:(id)sender {
-
+	
 	NSMutableDictionary *variables = [NSMutableDictionary dictionaryWithCapacity:2];
 	
 	//create a UIImage (you could use the picture album or camera too)
@@ -154,7 +155,10 @@
 	
 	//the fbGraph object is smart enough to recognize the binary image data inside the FbGraphFile
 	//object and treat that is such.....
-	[fbGraph doGraphPost:@"me/photos" withPostVars:variables];
+	FbGraphResponse *fb_graph_response = [fbGraph doGraphPost:@"117795728310/photos" withPostVars:variables];
+	NSLog(@"postPictureButtonPressed:  %@", fb_graph_response.htmlResponse);
+	
+	
 	NSLog(@"Now log into Facebook and look at your profile & photo albums...");
 	
 }	
@@ -178,7 +182,7 @@
  * DOC:  http://developers.facebook.com/docs/api#deleting
  **/
 -(IBAction)deleteMeFeedButtonPressed:(id)sender {
-
+	
 	if (feedPostId != nil) {
 		
 		NSMutableDictionary *variables = [NSMutableDictionary dictionaryWithCapacity:1];
@@ -190,7 +194,7 @@
 		//since it's been removed from facebook, clear our feedPostId
 		self.feedPostId = nil;
 		
-	//if they haven't pressed 'post me/feed' yet let them know they have to
+		//if they haven't pressed 'post me/feed' yet let them know they have to
 	} else {
 		//pop a message letting them know most of the info will be dumped in the log
 		UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Note" message:@"Please post to your stream first by pressing 'post me/feed', then delete." delegate:nil cancelButtonTitle:@"Ok" otherButtonTitles:nil];
@@ -208,11 +212,11 @@
 	
 	[variables setObject:@"iphone 4" forKey:@"q"];
 	[variables setObject:@"post" forKey:@"type"];
-
+	
 	FbGraphResponse *fb_graph_response = [fbGraph doGraphGet:@"search" withGetVars:variables];
-
+	
 	NSLog(@"Raw HTML:  %@", fb_graph_response.htmlResponse);
-
+	
 	/**
 	 * Lets go into some level of detail of how to parse data out of
 	 * the JSON formated response data we get from Facebook.
@@ -227,13 +231,13 @@
 	SBJSON *parser = [[SBJSON alloc] init];
 	NSDictionary *parsed_json = [parser objectWithString:fb_graph_response.htmlResponse error:nil];	
 	[parser release];
-
+	
 	//there's 2 additional dictionaries inside this one on the first level ('data' and 'paging')
 	NSDictionary *data = (NSDictionary *)[parsed_json objectForKey:@"data"];
 	
 	//how many wall posts have been returned that meet our search criteria (25 max by default)
 	NSLog(@"# search results:  %i", [data count]);
-
+	
 	NSEnumerator *enumerator = [data objectEnumerator];
 	NSDictionary *wall_post;
 	
@@ -244,7 +248,7 @@
 		NSString *from_fb_id = (NSString *)[posted_by_dict objectForKey:@"id"];
 		
 		NSString *message = (NSString *)[wall_post objectForKey:@"message"];
-			
+		
 		NSLog(@"FromName (FB ID):  Message:  %@ (%@):  %@", from_name, from_fb_id, message);
 	}
 	
@@ -252,9 +256,9 @@
 	//us a link with two links (next & previous)
 	NSDictionary *paging = (NSDictionary *)[parsed_json objectForKey:@"paging"];
 	NSString *next_page_url = (NSString *)[paging objectForKey:@"next"];
-
+	
 	FbGraphResponse *next_page_fb_graph_response = [fbGraph doGraphGetWithUrlString:next_page_url];
-
+	
 	NSLog(@"Next Page:  %@", next_page_fb_graph_response.htmlResponse);
 }
 
@@ -288,12 +292,24 @@
  **/
 - (void)fbGraphCallback:(id)sender {
 	
-	//pop a message letting them know most of the info will be dumped in the log
-	UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Note" message:@"For the simplest code, I've written all output to the 'Debugger Console'." delegate:nil cancelButtonTitle:@"Ok" otherButtonTitles:nil];
-	[alert show];
-	[alert release];
+	if ( (fbGraph.accessToken == nil) || ([fbGraph.accessToken length] == 0) ) {
+		
+		NSLog(@"You pressed the 'cancel' or 'Dont Allow' button, you are NOT logged into Facebook...I require you to be logged in & approve access before you can do anything useful....");
+		
+		//restart the authentication process.....
+		[fbGraph authenticateUserWithCallbackObject:self andSelector:@selector(fbGraphCallback:) 
+							 andExtendedPermissions:@"user_photos,user_videos,publish_stream,offline_access,user_checkins,friends_checkins"];
+		
+	} else {
+		//pop a message letting them know most of the info will be dumped in the log
+		UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Note" message:@"For the simplest code, I've written all output to the 'Debugger Console'." delegate:nil cancelButtonTitle:@"Ok" otherButtonTitles:nil];
+		[alert show];
+		[alert release];
+		
+		NSLog(@"------------>CONGRATULATIONS<------------, You're logged into Facebook...  Your oAuth token is:  %@", fbGraph.accessToken);
+		
+	}
 	
-	NSLog(@"------------>CONGRATULATIONS<------------, You're logged into Facebook...  Your oAuth token is:  %@", fbGraph.accessToken);
 }
 
 @end

@@ -35,6 +35,10 @@
 //  Created by dominic dimarco (ddimarco@room214.com @dominicdimarco) on 5/23/10.
 //
 
+/*
+ Thanks to dan@hXXXX.com & adamsXXXX@gmail.com for their feedback (incorporated below)
+ */
+
 #import "FbGraph.h"
 #import "SBJSON.h"
 #import "FbGraphFile.h"
@@ -73,9 +77,10 @@
 	[aWebView setDelegate:self];	
 	self.webView = aWebView;
 	
+	[aWebView release];
+	
 	[webView loadRequest:request];	
 	[super_view addSubview:webView];
-	
 }
 
 -(void)authenticateUserWithCallbackObject:(id)anObject andSelector:(SEL)selector andExtendedPermissions:(NSString *)extended_permissions {
@@ -89,9 +94,9 @@
 }
 
 - (FbGraphResponse *)doGraphGet:(NSString *)action withGetVars:(NSDictionary *)get_vars {
-
+	
 	NSString *url_string = [NSString stringWithFormat:@"https://graph.facebook.com/%@?", action];
-
+	
 	//tack on any get vars we have...
 	if ( (get_vars != nil) && ([get_vars count] > 0) ) {
 		
@@ -119,7 +124,7 @@
 
 - (FbGraphResponse *)doGraphGetWithUrlString:(NSString *)url_string {
 	
-	FbGraphResponse *return_value = [[FbGraphResponse alloc] init];
+	FbGraphResponse *return_value = [[[FbGraphResponse alloc] init] autorelease];
 	NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:url_string]];
 	
 	NSError *err;
@@ -137,12 +142,11 @@
 			UIImage *image = [UIImage imageWithData:response];
 			return_value.imageResponse = image;
 			
-		} else if ([resp.MIMEType isEqualToString:@"text/javascript"]) {
-			
-			return_value.htmlResponse = [[NSString alloc] initWithData:response encoding:NSUTF8StringEncoding];
 		} else {
-			
-			return_value.htmlResponse = [[NSString alloc] initWithData:response encoding:NSUTF8StringEncoding];
+		    
+			NSString *stringResponse = [[NSString alloc] initWithData:response encoding:NSUTF8StringEncoding];
+			return_value.htmlResponse = stringResponse;
+			[stringResponse release];			
 		}
 		
 	} else if (err != nil) {
@@ -155,7 +159,7 @@
 
 - (FbGraphResponse *)doGraphPost:(NSString *)action withPostVars:(NSDictionary *)post_vars {
 	
-	FbGraphResponse *return_value = [[FbGraphResponse alloc] init];
+	FbGraphResponse *return_value = [[[FbGraphResponse alloc] init] autorelease];
 	
 	NSString *urlString = [NSString stringWithFormat:@"https://graph.facebook.com/%@", action];
 	
@@ -189,7 +193,7 @@
 			FbGraphFile *upload_file = (FbGraphFile *)[post_vars objectForKey:key];
 			[upload_file appendDataToBody:body];
 			
-		//key/value nsstring/nsstring
+			//key/value nsstring/nsstring
 		} else {
 			value = (NSString *)[post_vars objectForKey:key];
 			
@@ -218,9 +222,12 @@
     NSURLResponse *response;
     NSData *data_reply;
 	NSError *err;
-
+	
     data_reply = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&err];
-    return_value.htmlResponse = (NSString *)[[NSString alloc] initWithData:data_reply encoding:NSUTF8StringEncoding];
+	
+	NSString *stringResponse = [[NSString alloc] initWithData:data_reply encoding:NSUTF8StringEncoding];
+    return_value.htmlResponse = stringResponse;
+	[stringResponse release];
 	
 	if (err != nil) {
 		return_value.error = err;
@@ -248,13 +255,16 @@
 	
 	//get the url string
 	NSString *url_string = [((_webView.request).URL) absoluteString];
-
+	
 	//looking for "access_token="
 	NSRange access_token_range = [url_string rangeOfString:@"access_token="];
 	
+	//looking for "error_reason=user_denied"
+	NSRange cancel_range = [url_string rangeOfString:@"error_reason=user_denied"];
+	
 	//it exists?  coolio, we have a token, now let's parse it out....
 	if (access_token_range.length > 0) {
-
+		
 		//we want everything after the 'access_token=' thus the position where it starts + it's length
 		int from_index = access_token_range.location + access_token_range.length;
 		NSString *access_token = [url_string substringFromIndex:from_index];
@@ -269,7 +279,6 @@
 		access_token = [access_token substringToIndex:period_range.location];
 		
 		//store our request token....
-		NSLog(@"token:  %@", access_token);	
 		self.accessToken = access_token;
 		
 		//remove our window
@@ -277,34 +286,38 @@
 		if (!window) {
 			window = [[UIApplication sharedApplication].windows objectAtIndex:0];
 		}
-		[webView removeFromSuperview];
-		[webView release];
-		self.webView = nil;
+		
+		[self.webView removeFromSuperview];
 		
 		//tell our callback function that we're done logging in :)
 		if ( (callbackObject != nil) && (callbackSelector != nil) ) {
 			[callbackObject performSelector:callbackSelector];
 		}
-	}//end if length > 0
+		
+		//the user pressed cancel
+	} else if (cancel_range.length > 0) {
+		//remove our window
+		UIWindow* window = [UIApplication sharedApplication].keyWindow;
+		if (!window) {
+			window = [[UIApplication sharedApplication].windows objectAtIndex:0];
+		}
+		
+		[self.webView removeFromSuperview];
+		
+		//tell our callback function that we're done logging in :)
+		if ( (callbackObject != nil) && (callbackSelector != nil) ) {
+			[callbackObject performSelector:callbackSelector];
+		}
+		
+	}
 }
 
 -(void) dealloc {
 	
-	if (facebookClientID != nil) {
-		[facebookClientID release];
-	}
-
-	if (redirectUri != nil) {
-		[redirectUri release];
-	}
-	
-	if (accessToken != nil) {
-		[accessToken release];
-	}
-	
-	if (webView != nil) {
-		[webView release];
-	}
+	[facebookClientID release];
+	[redirectUri release];
+	[accessToken release];
+	[webView release];
     [super dealloc];
 }
 
